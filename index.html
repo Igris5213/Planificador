@@ -188,11 +188,16 @@ const FIREBASE_READY = !!(
 );
 const DATA_PATH = "hogar/planificador-comidas";
 
-let fbAuth = null, fbDb = null;
+let fbAuth = null, fbDb = null, fbInitError = null;
 if (FIREBASE_READY) {
-  firebase.initializeApp(firebaseConfig);
-  fbAuth = firebase.auth();
-  fbDb = firebase.database();
+  try {
+    firebase.initializeApp(firebaseConfig);
+    fbAuth = firebase.auth();
+    fbDb = firebase.database();
+  } catch (e) {
+    console.error("Error al iniciar Firebase", e);
+    fbInitError = e;
+  }
 }
 
 function ensureAuth() {
@@ -209,13 +214,22 @@ function ensureAuth() {
 // cualquier dispositivo actualiza los datos (sincronización en vivo).
 function subscribeData(onData, onError) {
   if (!FIREBASE_READY) { onError(new Error("Firebase no configurado")); return () => {}; }
+  if (fbInitError) { onError(fbInitError); return () => {}; }
   let ref = null;
   ensureAuth()
     .then(() => {
       ref = fbDb.ref(DATA_PATH);
       ref.on("value", (snap) => {
         const val = snap.val();
-        onData(val || JSON.parse(JSON.stringify(DEFAULT_DATA)));
+        // Firebase omite claves vacías (objetos/arreglos sin elementos) al guardarlas,
+        // así que reconstruimos siempre la forma completa para no romper la app.
+        const safe = {
+          members: (val && val.members && val.members.length) ? val.members : DEFAULT_DATA.members,
+          recipes: (val && val.recipes) || [],
+          entries: (val && val.entries) || {},
+          shoppingChecked: (val && val.shoppingChecked) || {},
+        };
+        onData(safe);
       }, onError);
     })
     .catch(onError);
@@ -332,7 +346,7 @@ function App() {
   const activeMember = data.members.find((m) => m.id === activeMemberId) || data.members[0];
 
   function entryKey(dayIdx, slot, memberId) { return `${weekKey}|${dayIdx}|${slot}|${memberId}`; }
-  function getEntry(dayIdx, slot, memberId) { return data.entries[entryKey(dayIdx, slot, memberId || activeMember.id)]; }
+  function getEntry(dayIdx, slot, memberId) { return (data.entries || {})[entryKey(dayIdx, slot, memberId || activeMember.id)]; }
   function setEntryRecipe(dayIdx, slot, memberId, recipeId) {
     persist((prev) => {
       const key = entryKey(dayIdx, slot, memberId);
