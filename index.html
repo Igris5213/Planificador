@@ -1,0 +1,1116 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Libreta de comidas</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#F0553F">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Comidas">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Inter:wght@400;500;600&display=swap');
+
+  html, body { margin: 0; padding: 0; }
+  body {
+    --bg: #F3F6FB;
+    --card: #FFFFFF;
+    --ink: #1F2937;
+    --ink-soft: #93A0B4;
+    --line: #EEF1F6;
+    --blue: #3E7BFA;
+    --blue-soft: #E4EDFF;
+    --green: #34C77B;
+    --green-soft: #E4F8ED;
+    --purple: #8B7CF6;
+    --purple-soft: #EFEAFE;
+    --yellow: #F5B62D;
+    --yellow-soft: #FFF3D9;
+    --red: #F0553F;
+    font-family: 'Inter', sans-serif;
+    color: var(--ink);
+    background: var(--bg);
+    min-height: 100vh;
+  }
+  * { box-sizing: border-box; }
+  #root { max-width: 420px; margin: 0 auto; min-height: 100vh; background: var(--bg); position: relative; }
+  .mp-display { font-family: 'Manrope', sans-serif; }
+
+  .mp-card {
+    background: var(--card);
+    border-radius: 18px;
+    box-shadow: 0 6px 20px rgba(31,41,55,0.06);
+  }
+  .mp-btn {
+    font-family: 'Manrope', sans-serif;
+    font-weight: 700;
+    border: none;
+    cursor: pointer;
+    transition: transform .12s ease, opacity .12s ease;
+  }
+  .mp-btn:active { transform: scale(0.97); }
+  .mp-icon-btn {
+    width: 38px; height: 38px; border-radius: 12px; display: flex; align-items: center; justify-content: center;
+    background: var(--card); border: none; cursor: pointer; box-shadow: 0 2px 8px rgba(31,41,55,0.05);
+  }
+  .mp-input {
+    font-family: 'Inter', sans-serif;
+    border: 1.5px solid var(--line);
+    border-radius: 10px;
+    padding: 9px 12px;
+    font-size: 14px;
+    background: #fff;
+    color: var(--ink);
+    width: 100%;
+  }
+  .mp-input:focus { outline: 2px solid var(--blue); outline-offset: 1px; }
+  .mp-label {
+    font-family: 'Manrope', sans-serif;
+    font-size: 11px;
+    letter-spacing: .03em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+    display: block;
+    margin-bottom: 4px;
+    font-weight: 700;
+  }
+  .mp-overlay {
+    position: fixed; inset: 0; background: rgba(31,41,55,0.45);
+    display: flex; align-items: flex-end; justify-content: center; z-index: 50;
+  }
+  .mp-modal {
+    background: var(--card);
+    border-radius: 22px 22px 0 0;
+    max-width: 420px;
+    width: 100%;
+    max-height: 85vh;
+    overflow-y: auto;
+    padding: 20px;
+  }
+  .mp-modal.mp-modal-center { border-radius: 20px; margin-bottom: 20vh; }
+  .mp-overlay-center {
+    position: fixed; inset: 0; background: rgba(31,41,55,0.45);
+    backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+    display: flex; align-items: center; justify-content: center; z-index: 50;
+    padding: 20px;
+  }
+  .mp-chip {
+    display: inline-flex; align-items: center; gap: 5px;
+    font-size: 11px; font-family: 'Manrope', sans-serif; font-weight: 700;
+    padding: 3px 9px; border-radius: 999px;
+  }
+  ::-webkit-scrollbar { height: 8px; width: 8px; }
+  ::-webkit-scrollbar-thumb { background: var(--line); border-radius: 4px; }
+  .mp-navitem { display: flex; flex-direction: column; align-items: center; gap: 3px; cursor: pointer; flex: 1; padding: 6px 0; background: none; border: none; }
+  @keyframes mp-menu-in { from { opacity: 0; transform: translateY(-6px) scale(0.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel" data-presets="react">
+const { useState, useEffect, useMemo, useCallback } = React;
+
+/* ---------- helpers ---------- */
+const SLOTS = [
+  { key: "Comida", label: "Comida", emoji: "🍽️", color: "var(--green)", soft: "var(--green-soft)" },
+];
+const SLOT_KEYS = SLOTS.map((s) => s.key);
+const DAY_NAMES = ["LUN", "MAR", "MIÉ", "JUE", "VIE", "SÁB", "DOM"];
+const MEMBER_COLORS = ["#3E7BFA", "#34C77B", "#F5B62D", "#8B7CF6", "#F0553F", "#2AB6C4"];
+const FOOD_EMOJI = { Comida: "🍽️" };
+
+const uid = () => "id_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+
+function mondayOf(date) {
+  const d = new Date(date);
+  const day = d.getDay();
+  const diff = day === 0 ? -6 : 1 - day;
+  d.setDate(d.getDate() + diff);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+function fmtDate(d) { return d.toLocaleDateString("es-MX", { day: "2-digit", month: "short" }); }
+function isoKey(d) { return d.toISOString().slice(0, 10); }
+function weekDates(offset) {
+  const monday = mondayOf(new Date());
+  monday.setDate(monday.getDate() + offset * 7);
+  return Array.from({ length: 7 }, (_, i) => { const d = new Date(monday); d.setDate(d.getDate() + i); return d; });
+}
+function todayIdxInWeek() { const d = new Date().getDay(); return d === 0 ? 6 : d - 1; }
+
+const DEFAULT_DATA = {
+  members: [{ id: uid(), name: "Sergio", color: MEMBER_COLORS[0] }],
+  recipes: [],
+  entries: {},
+  shoppingChecked: {},
+};
+
+/* ---------- guardado en línea (Firebase Realtime Database) ----------
+   Pasos para activarlo (una sola vez, gratis):
+   1) Entra a https://console.firebase.google.com y crea un proyecto.
+   2) En el menú lateral abre "Compilación" > "Realtime Database" y créala
+      (elige "Iniciar en modo de prueba", luego ajustaremos las reglas).
+   3) Ve a "Compilación" > "Authentication" > pestaña "Sign-in method" y
+      activa el proveedor "Anónimo".
+   4) Ve a "Configuración del proyecto" (el engrane) > "Tus apps" > icono
+      web </> para registrar una app. Copia el objeto firebaseConfig que
+      te muestre y pégalo abajo, reemplazando el de ejemplo.
+   5) En Realtime Database > pestaña "Reglas", pega esto y publica:
+        {
+          "rules": {
+            "hogar": {
+              "planificador-comidas": {
+                ".read": "auth != null",
+                ".write": "auth != null"
+              }
+            }
+          }
+        }
+   Con esto, todos los dispositivos que abran este mismo archivo (con la
+   misma configuración) verán y editarán las mismas comidas en tiempo real.
+--------------------------------------------------------------------- */
+const firebaseConfig = {
+  apiKey: "AIzaSyD7BLyGR-caFm_cgDQkfGR30tvao0vk0K8",
+  authDomain: "controlcomidas-ef87c.firebaseapp.com",
+  databaseURL: "https://controlcomidas-ef87c-default-rtdb.firebaseio.com",
+  projectId: "controlcomidas-ef87c",
+  storageBucket: "controlcomidas-ef87c.firebasestorage.app",
+  messagingSenderId: "625935023266",
+  appId: "1:625935023266:web:32a675d7ecb1e05fcc2bfb",
+};
+
+const FIREBASE_READY = !!(
+  firebaseConfig.apiKey && firebaseConfig.apiKey !== "TU_API_KEY" &&
+  firebaseConfig.databaseURL && firebaseConfig.databaseURL !== "PEGA_AQUI_TU_DATABASE_URL"
+);
+const DATA_PATH = "hogar/planificador-comidas";
+
+let fbAuth = null, fbDb = null, fbInitError = null;
+if (FIREBASE_READY) {
+  try {
+    firebase.initializeApp(firebaseConfig);
+    fbAuth = firebase.auth();
+    fbDb = firebase.database();
+  } catch (e) {
+    console.error("Error al iniciar Firebase", e);
+    fbInitError = e;
+  }
+}
+
+function ensureAuth() {
+  return new Promise((resolve, reject) => {
+    if (!FIREBASE_READY) { reject(new Error("Firebase no configurado")); return; }
+    const unsub = fbAuth.onAuthStateChanged((user) => {
+      if (user) { unsub(); resolve(user); }
+      else { fbAuth.signInAnonymously().catch(reject); }
+    }, reject);
+  });
+}
+
+// Se suscribe a los cambios en línea; onData se llama cada vez que
+// cualquier dispositivo actualiza los datos (sincronización en vivo).
+function subscribeData(onData, onError) {
+  if (!FIREBASE_READY) { onError(new Error("Firebase no configurado")); return () => {}; }
+  if (fbInitError) { onError(fbInitError); return () => {}; }
+  let ref = null;
+  ensureAuth()
+    .then(() => {
+      ref = fbDb.ref(DATA_PATH);
+      ref.on("value", (snap) => {
+        const val = snap.val();
+        // Firebase omite claves vacías (objetos/arreglos sin elementos) al guardarlas,
+        // así que reconstruimos siempre la forma completa para no romper la app.
+        const safe = {
+          members: (val && val.members && val.members.length) ? val.members : DEFAULT_DATA.members,
+          recipes: (val && val.recipes) || [],
+          entries: (val && val.entries) || {},
+          shoppingChecked: (val && val.shoppingChecked) || {},
+        };
+        onData(safe);
+      }, onError);
+    })
+    .catch(onError);
+  return () => { if (ref) ref.off("value"); };
+}
+
+async function saveData(data) {
+  if (!FIREBASE_READY) return;
+  try { await ensureAuth(); await fbDb.ref(DATA_PATH).set(data); }
+  catch (e) { console.error("No se pudo guardar en línea", e); }
+}
+
+/* ---------- icons ---------- */
+function Icon({ name, size = 22, color = "currentColor" }) {
+  const s = { width: size, height: size, stroke: color, fill: "none", strokeWidth: 1.8, strokeLinecap: "round", strokeLinejoin: "round" };
+  switch (name) {
+    case "menu": return <svg {...s} viewBox="0 0 24 24"><path d="M3 6h18M3 12h18M3 18h18"/></svg>;
+    case "bell": return <svg {...s} viewBox="0 0 24 24"><path d="M18 8a6 6 0 10-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 01-3.4 0"/></svg>;
+    case "list": return <svg {...s} viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>;
+    case "home": return <svg {...s} viewBox="0 0 24 24"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/></svg>;
+    case "calendar": return <svg {...s} viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M8 3v4M16 3v4M3 10h18"/></svg>;
+    case "apple": return <svg {...s} viewBox="0 0 24 24"><path d="M12 8c-3 0-5.5 2.5-5.5 6.5S9 21 12 21s5.5-2 5.5-6.5S15 8 12 8z"/><path d="M12 8c0-2 1.5-4 3.5-4"/></svg>;
+    case "chart": return <svg {...s} viewBox="0 0 24 24"><path d="M5 20V10M12 20V4M19 20v-7"/></svg>;
+    case "dots": return <svg {...s} viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.6" fill={color}/><circle cx="12" cy="12" r="1.6" fill={color}/><circle cx="19" cy="12" r="1.6" fill={color}/></svg>;
+    case "plus": return <svg {...s} viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>;
+    case "check": return <svg {...s} viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg>;
+    case "vdots": return <svg {...s} viewBox="0 0 24 24"><circle cx="12" cy="5" r="1.6" fill={color}/><circle cx="12" cy="12" r="1.6" fill={color}/><circle cx="12" cy="19" r="1.6" fill={color}/></svg>;
+    case "back": return <svg {...s} viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg>;
+    default: return null;
+  }
+}
+
+/* ---------- progress ring ---------- */
+function Ring({ percent, color, size = 76, stroke = 7, value, label, sub }) {
+  const r = (size - stroke) / 2;
+  const c = 2 * Math.PI * r;
+  const p = Math.max(0, Math.min(100, percent));
+  const offset = c - (p / 100) * c;
+  return (
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
+      <div style={{ position: "relative", width: size, height: size }}>
+        <svg width={size} height={size} style={{ transform: "rotate(-90deg)" }}>
+          <circle cx={size/2} cy={size/2} r={r} stroke="#EEF1F6" strokeWidth={stroke} fill="none" />
+          <circle cx={size/2} cy={size/2} r={r} stroke={color} strokeWidth={stroke} fill="none"
+            strokeDasharray={c} strokeDashoffset={offset} strokeLinecap="round" style={{ transition: "stroke-dashoffset .4s ease" }} />
+        </svg>
+        <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <span className="mp-display" style={{ fontSize: 17, fontWeight: 800 }}>{value}</span>
+        </div>
+      </div>
+      <div style={{ textAlign: "center" }}>
+        <div style={{ fontSize: 12.5, fontWeight: 600 }}>{label}</div>
+        {sub && <div style={{ fontSize: 10.5, color: "var(--ink-soft)" }}>{sub}</div>}
+      </div>
+    </div>
+  );
+}
+
+/* ---------- main ---------- */
+function App() {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [syncError, setSyncError] = useState(null);
+  const [tab, setTab] = useState("resumen");
+  const [weekOffset, setWeekOffset] = useState(0);
+  const [selectedDayIdx, setSelectedDayIdx] = useState(todayIdxInWeek());
+  const [activeMemberId, setActiveMemberId] = useState(null);
+  const [recipeModal, setRecipeModal] = useState(null);
+  const [pickerCell, setPickerCell] = useState(null);
+  const [mealMenu, setMealMenu] = useState(null); // {dayIdx, slot}
+  const [addSheet, setAddSheet] = useState(false);
+  const [floatingMenuOpen, setFloatingMenuOpen] = useState(false);
+
+  useEffect(() => {
+    const unsubscribe = subscribeData(
+      (d) => { setData(d); setLoading(false); setSyncError(null); },
+      (err) => { console.error(err); setSyncError(err.message || "Error de conexión"); setLoading(false); }
+    );
+    return unsubscribe;
+  }, []);
+
+  useEffect(() => {
+    if (data && !activeMemberId) setActiveMemberId(data.members[0]?.id || null);
+  }, [data]);
+
+  const persist = useCallback((updater) => {
+    setData((prev) => {
+      const next = typeof updater === "function" ? updater(prev) : updater;
+      saveData(next);
+      return next;
+    });
+  }, []);
+
+  const days = useMemo(() => weekDates(weekOffset), [weekOffset]);
+  const weekKey = isoKey(days[0]);
+
+  if (!FIREBASE_READY) {
+    return (
+      <div style={{ padding: 28, fontFamily: "'Inter', sans-serif", lineHeight: 1.5 }}>
+        <div className="mp-display" style={{ fontWeight: 800, fontSize: 18, marginBottom: 10 }}>⚙️ Falta configurar el guardado en línea</div>
+        <p style={{ fontSize: 13.5, color: "var(--ink-soft)" }}>Este archivo aún tiene los datos de ejemplo de Firebase. Abre el HTML en un editor de texto, busca <code>firebaseConfig</code> cerca del inicio del script y pega ahí los datos de tu proyecto de Firebase (gratis). Las instrucciones paso a paso están en el comentario justo arriba de esa variable.</p>
+      </div>
+    );
+  }
+
+  if (loading || !data) {
+    return (
+      <div style={{ padding: 60, textAlign: "center", fontFamily: "'Manrope', sans-serif", color: "#93A0B4" }}>
+        {syncError ? `No se pudo conectar en línea: ${syncError}` : "Preparando tu libreta…"}
+      </div>
+    );
+  }
+
+  const activeMember = data.members.find((m) => m.id === activeMemberId) || data.members[0];
+
+  function entryKey(dayIdx, slot, memberId) { return `${weekKey}|${dayIdx}|${slot}|${memberId}`; }
+  function getEntry(dayIdx, slot, memberId) { return (data.entries || {})[entryKey(dayIdx, slot, memberId || activeMember.id)]; }
+  function setEntryRecipe(dayIdx, slot, memberId, recipeId) {
+    persist((prev) => {
+      const key = entryKey(dayIdx, slot, memberId);
+      const next = { ...prev, entries: { ...prev.entries } };
+      if (!recipeId) { delete next.entries[key]; }
+      else { next.entries[key] = { recipeId, status: "pendiente" }; }
+      return next;
+    });
+  }
+  function setEntryStatus(dayIdx, slot, memberId, status) {
+    persist((prev) => {
+      const key = entryKey(dayIdx, slot, memberId);
+      const existing = prev.entries[key];
+      if (!existing) return prev;
+      return { ...prev, entries: { ...prev.entries, [key]: { ...existing, status } } };
+    });
+  }
+
+  function addMember(name) {
+    persist((prev) => {
+      const color = MEMBER_COLORS[prev.members.length % MEMBER_COLORS.length];
+      const m = { id: uid(), name, color };
+      return { ...prev, members: [...prev.members, m] };
+    });
+  }
+  function updateMember(id, patch) { persist((prev) => ({ ...prev, members: prev.members.map((m) => (m.id === id ? { ...m, ...patch } : m)) })); }
+  function removeMember(id) {
+    persist((prev) => ({ ...prev, members: prev.members.filter((m) => m.id !== id) }));
+    if (activeMemberId === id) setActiveMemberId(data.members.find((m) => m.id !== id)?.id || null);
+  }
+
+  function saveRecipe(recipe) {
+    persist((prev) => {
+      const exists = prev.recipes.some((r) => r.id === recipe.id);
+      return { ...prev, recipes: exists ? prev.recipes.map((r) => (r.id === recipe.id ? recipe : r)) : [...prev.recipes, recipe] };
+    });
+    setRecipeModal(null);
+  }
+  function deleteRecipe(id) { persist((prev) => ({ ...prev, recipes: prev.recipes.filter((r) => r.id !== id) })); setRecipeModal(null); }
+  function toggleShoppingItem(key) {
+    persist((prev) => ({ ...prev, shoppingChecked: { ...prev.shoppingChecked, [weekKey + "|" + key]: !prev.shoppingChecked[weekKey + "|" + key] } }));
+  }
+
+  return (
+    <React.Fragment>
+      <div style={{ padding: "18px 18px 90px" }}>
+        {syncError && (
+          <div className="mp-card" style={{ padding: "9px 14px", marginBottom: 14, background: "#FDE9E6", color: "var(--red)", fontSize: 12.5, fontWeight: 600 }}>
+            Sin conexión en línea — los cambios se guardarán al reconectar.
+          </div>
+        )}
+        {tab === "resumen" && (
+          <ResumenTab
+            data={data} days={days} weekOffset={weekOffset} setWeekOffset={setWeekOffset}
+            activeMember={activeMember} setActiveMemberId={setActiveMemberId}
+            selectedDayIdx={selectedDayIdx} setSelectedDayIdx={setSelectedDayIdx}
+            getEntry={getEntry}
+            openMealMenu={(dayIdx, slot) => setMealMenu({ dayIdx, slot })}
+            onAddMeal={() => setAddSheet(true)}
+            onOpenMenu={() => setFloatingMenuOpen(true)}
+            onOpenLista={() => setTab("compras")}
+          />
+        )}
+        {tab === "plan" && (
+          <PlanTab
+            data={data} days={days} weekOffset={weekOffset} setWeekOffset={setWeekOffset}
+            activeMember={activeMember} setActiveMemberId={setActiveMemberId}
+            getEntry={getEntry} setEntryStatus={setEntryStatus}
+            openPicker={(dayIdx, slot) => setPickerCell({ dayIdx, slot })}
+          />
+        )}
+        {tab === "alimentos" && (
+          <RecipesTab recipes={data.recipes} onNew={() => setRecipeModal("new")} onEdit={(r) => setRecipeModal(r)} />
+        )}
+        {tab === "compras" && (
+          <ShoppingTab data={data} weekKey={weekKey} toggleShoppingItem={toggleShoppingItem} onBack={() => setTab("resumen")} />
+        )}
+        {tab === "estadisticas" && (
+          <NutritionTab data={data} days={days} weekKey={weekKey} />
+        )}
+        {tab === "mas" && (
+          <MasTab members={data.members} onAdd={addMember} onUpdate={updateMember} onRemove={removeMember} onBack={() => setTab("resumen")} />
+        )}
+      </div>
+
+      <BottomNav tab={tab} setTab={setTab} />
+
+      {floatingMenuOpen && (
+        <FloatingMenu
+          tab={tab}
+          setTab={(t) => { setTab(t); setFloatingMenuOpen(false); }}
+          onClose={() => setFloatingMenuOpen(false)}
+        />
+      )}
+
+      {pickerCell && (
+        <RecipePicker
+          recipes={data.recipes}
+          currentId={getEntry(pickerCell.dayIdx, pickerCell.slot, activeMember.id)?.recipeId}
+          onPick={(rid) => { setEntryRecipe(pickerCell.dayIdx, pickerCell.slot, activeMember.id, rid); setPickerCell(null); }}
+          onClose={() => setPickerCell(null)}
+          onNewRecipe={() => { setPickerCell(null); setRecipeModal("new"); }}
+        />
+      )}
+      {addSheet && (
+        <AddMealSheet
+          recipes={data.recipes}
+          onClose={() => setAddSheet(false)}
+          onConfirm={(slot, recipeId) => { setEntryRecipe(selectedDayIdx, slot, activeMember.id, recipeId); setAddSheet(false); }}
+          onNewRecipe={() => { setAddSheet(false); setRecipeModal("new"); }}
+        />
+      )}
+      {mealMenu && (
+        <MealActionSheet
+          entry={getEntry(mealMenu.dayIdx, mealMenu.slot, activeMember.id)}
+          recipe={data.recipes.find((r) => r.id === getEntry(mealMenu.dayIdx, mealMenu.slot, activeMember.id)?.recipeId)}
+          onStatus={(status) => { setEntryStatus(mealMenu.dayIdx, mealMenu.slot, activeMember.id, status); setMealMenu(null); }}
+          onChange={() => { setPickerCell({ dayIdx: mealMenu.dayIdx, slot: mealMenu.slot }); setMealMenu(null); }}
+          onRemove={() => { setEntryRecipe(mealMenu.dayIdx, mealMenu.slot, activeMember.id, null); setMealMenu(null); }}
+          onClose={() => setMealMenu(null)}
+        />
+      )}
+      {recipeModal && (
+        <RecipeModal recipe={recipeModal === "new" ? null : recipeModal} onSave={saveRecipe}
+          onDelete={recipeModal !== "new" ? () => deleteRecipe(recipeModal.id) : null} onClose={() => setRecipeModal(null)} />
+      )}
+    </React.Fragment>
+  );
+}
+
+/* ---------- bottom nav ---------- */
+function BottomNav({ tab, setTab }) {
+  const items = [
+    { key: "resumen", label: "Resumen", icon: "home" },
+    { key: "plan", label: "Plan semanal", icon: "calendar" },
+    { key: "alimentos", label: "Alimentos", icon: "apple" },
+    { key: "estadisticas", label: "Estadísticas", icon: "chart" },
+    { key: "mas", label: "Más", icon: "dots" },
+  ];
+  return (
+    <div
+      className="mp-card"
+      style={{
+        position: "fixed", bottom: "calc(env(safe-area-inset-bottom, 0px) + 14px)",
+        left: "50%", transform: "translateX(-50%)",
+        width: "calc(100% - 36px)", maxWidth: 384,
+        display: "flex", padding: "10px 6px",
+        borderRadius: 22,
+        boxShadow: "0 10px 30px rgba(31,41,55,0.14)",
+        zIndex: 30,
+      }}
+    >
+      {items.map((it) => {
+        const active = tab === it.key || (it.key === "resumen" && tab === "compras");
+        return (
+          <button key={it.key} className="mp-navitem" onClick={() => setTab(it.key)}>
+            <Icon name={it.icon} size={21} color={active ? "var(--blue)" : "#B7C0CE"} />
+            <span style={{ fontSize: 10, fontWeight: 700, fontFamily: "'Manrope', sans-serif", color: active ? "var(--blue)" : "#B7C0CE" }}>{it.label}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/* ---------- floating menu (opened from header hamburger icon) ---------- */
+function FloatingMenu({ tab, setTab, onClose }) {
+  const items = [
+    { key: "resumen", label: "Resumen", icon: "home" },
+    { key: "plan", label: "Plan semanal", icon: "calendar" },
+    { key: "alimentos", label: "Alimentos", icon: "apple" },
+    { key: "compras", label: "Lista de compras", icon: "list" },
+    { key: "estadisticas", label: "Estadísticas", icon: "chart" },
+    { key: "mas", label: "Más", icon: "dots" },
+  ];
+  return (
+    <div
+      style={{ position: "fixed", inset: 0, zIndex: 60, background: "rgba(31,41,55,0.25)" }}
+      onClick={onClose}
+    >
+      <div
+        className="mp-card"
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          position: "absolute", top: 66, left: 18, width: 220, padding: 8,
+          animation: "mp-menu-in .14s ease",
+        }}
+      >
+        {items.map((it) => {
+          const active = tab === it.key;
+          return (
+            <button
+              key={it.key}
+              className="mp-btn"
+              onClick={() => setTab(it.key)}
+              style={{
+                display: "flex", alignItems: "center", gap: 10, width: "100%",
+                padding: "10px 10px", borderRadius: 12, background: active ? "var(--blue-soft)" : "transparent",
+                textAlign: "left",
+              }}
+            >
+              <Icon name={it.icon} size={18} color={active ? "var(--blue)" : "var(--ink-soft)"} />
+              <span className="mp-display" style={{ fontSize: 13.5, fontWeight: 700, color: active ? "var(--blue)" : "var(--ink)" }}>{it.label}</span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/* ---------- RESUMEN tab (matches reference design) ---------- */
+function ResumenTab({ data, days, weekOffset, setWeekOffset, activeMember, setActiveMemberId, selectedDayIdx, setSelectedDayIdx, getEntry, openMealMenu, onAddMeal, onOpenMenu, onOpenLista }) {
+  if (!activeMember) {
+    return (
+      <div className="mp-card" style={{ padding: 24, textAlign: "center" }}>
+        <p style={{ color: "var(--ink-soft)" }}>Agrega una persona para empezar.</p>
+        <button className="mp-btn" onClick={onOpenMenu} style={{ background: "var(--blue)", color: "#fff", padding: "10px 18px", borderRadius: 12 }}>+ Agregar persona</button>
+      </div>
+    );
+  }
+
+  const weekStats = useMemo(() => {
+    let planned = 0, done = 0;
+    const dayComplete = new Array(7).fill(false);
+    for (let d = 0; d < 7; d++) {
+      let dayPlanned = 0, dayDone = 0;
+      for (const slot of SLOT_KEYS) {
+        const e = getEntry(d, slot, activeMember.id);
+        if (e) { planned++; dayPlanned++; if (e.status === "comido") { done++; dayDone++; } }
+      }
+      dayComplete[d] = dayPlanned > 0 && dayPlanned === dayDone;
+    }
+    const completedDays = dayComplete.filter(Boolean).length;
+    const pct = planned ? Math.round((done / planned) * 100) : 0;
+    return { planned, done, pct, completedDays, dayComplete };
+  }, [data, activeMember.id]);
+
+  const dayStats = useMemo(() => {
+    let planned = 0, done = 0;
+    for (const slot of SLOT_KEYS) {
+      const e = getEntry(selectedDayIdx, slot, activeMember.id);
+      if (!e) continue;
+      planned++;
+      if (e.status === "comido") done++;
+    }
+    const pct = planned ? Math.round((done / planned) * 100) : 0;
+    return { planned, done, pct };
+  }, [data, selectedDayIdx, activeMember.id]);
+
+  function goDay(delta) {
+    let idx = selectedDayIdx + delta;
+    if (idx < 0) { setWeekOffset((w) => w - 1); idx = 6; }
+    else if (idx > 6) { setWeekOffset((w) => w + 1); idx = 0; }
+    setSelectedDayIdx(idx);
+  }
+
+  const dateRangeLabel = `${fmtDate(days[0])} – ${fmtDate(days[6])}`;
+
+  return (
+    <div>
+      {/* header */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 18 }}>
+        <button className="mp-icon-btn" onClick={onOpenMenu}><Icon name="menu" size={19} color="var(--ink)" /></button>
+        <div style={{ textAlign: "center" }}>
+          <div className="mp-display" style={{ fontSize: 18, fontWeight: 800 }}>¡Hola, {activeMember.name}!</div>
+          <div style={{ fontSize: 12, color: "var(--ink-soft)" }}>Controla tu alimentación</div>
+        </div>
+        <div className="mp-icon-btn" style={{ position: "relative" }}>
+          <Icon name="bell" size={19} color="var(--ink)" />
+          <span style={{ position: "absolute", top: 8, right: 9, width: 7, height: 7, borderRadius: "50%", background: "var(--red)" }} />
+        </div>
+      </div>
+
+      {data.members.length > 1 && (
+        <div style={{ display: "flex", gap: 6, marginBottom: 14, overflowX: "auto" }}>
+          {data.members.map((m) => (
+            <button key={m.id} onClick={() => setActiveMemberId(m.id)} className="mp-btn mp-chip"
+              style={{ border: `1.5px solid ${m.color}`, background: activeMember.id === m.id ? m.color : "#fff", color: activeMember.id === m.id ? "#fff" : m.color, whiteSpace: "nowrap" }}>
+              {m.name}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* resumen del día */}
+      <div className="mp-card" style={{ padding: "18px 16px", marginBottom: 20 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+          <div className="mp-display" style={{ fontWeight: 800, fontSize: 15.5 }}>Resumen del día</div>
+          <div style={{ fontSize: 11.5, color: "var(--ink-soft)", display: "flex", alignItems: "center", gap: 6 }}>
+            <button className="mp-btn" onClick={() => goDay(-1)} style={{ background: "none", color: "var(--ink-soft)", fontSize: 13 }}>‹</button>
+            {DAY_NAMES[selectedDayIdx]} {fmtDate(days[selectedDayIdx])}
+            <button className="mp-btn" onClick={() => goDay(1)} style={{ background: "none", color: "var(--ink-soft)", fontSize: 13 }}>›</button>
+          </div>
+        </div>
+        <div style={{ display: "flex", justifyContent: "space-around" }}>
+          <Ring percent={(dayStats.planned / SLOT_KEYS.length) * 100} color="var(--blue)" value={dayStats.planned} label="Comidas" sub="Planificadas" />
+          <Ring percent={dayStats.pct} color="var(--green)" value={dayStats.pct + "%"} label="Objetivo" sub="Cumplido" />
+          <Ring percent={(weekStats.completedDays / 7) * 100} color="var(--purple)" value={weekStats.completedDays + "/7"} label="Días" sub="Completados" />
+        </div>
+      </div>
+
+      {/* vista semanal */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+        <div className="mp-display" style={{ fontWeight: 800, fontSize: 15.5 }}>Vista semanal</div>
+        <button className="mp-btn" onClick={onOpenLista} style={{ background: "none", display: "flex", alignItems: "center", gap: 5, color: "var(--blue)", fontSize: 12.5, fontWeight: 700 }}>
+          Ver lista <Icon name="list" size={15} color="var(--blue)" />
+        </button>
+      </div>
+
+      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 20, gap: 4 }}>
+        {days.map((d, i) => {
+          const isSelected = i === selectedDayIdx;
+          const complete = weekStats.dayComplete[i];
+          return (
+            <button key={i} onClick={() => setSelectedDayIdx(i)} className="mp-btn"
+              style={{
+                flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 5, padding: "8px 2px",
+                borderRadius: 14, background: isSelected ? "var(--blue-soft)" : "transparent",
+                border: isSelected ? "1.5px solid var(--blue)" : "1.5px solid transparent",
+              }}>
+              <span style={{ fontSize: 9.5, fontWeight: 700, color: isSelected ? "var(--blue)" : "var(--ink-soft)" }}>{DAY_NAMES[i]}</span>
+              <span className="mp-display" style={{ fontSize: 14, fontWeight: 800, color: isSelected ? "var(--blue)" : "var(--ink)" }}>{d.getDate()}</span>
+              {complete ? (
+                <Icon name="check" size={12} color="var(--green)" />
+              ) : (
+                <span style={{ width: 5, height: 5, borderRadius: "50%", background: isSelected ? "var(--blue)" : "var(--line)" }} />
+              )}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* meal groups for selected day — only show slots that already have a meal */}
+      {(() => {
+        const plannedSlots = SLOTS.filter((slot) => getEntry(selectedDayIdx, slot.key, activeMember.id));
+        if (plannedSlots.length === 0) {
+          return (
+            <div className="mp-card" style={{ padding: 22, textAlign: "center", marginBottom: 18, color: "var(--ink-soft)", fontSize: 12.5 }}>
+              Aún no has agregado comidas para este día.
+            </div>
+          );
+        }
+        return plannedSlots.map((slot) => {
+          const entry = getEntry(selectedDayIdx, slot.key, activeMember.id);
+          const recipe = entry && data.recipes.find((r) => r.id === entry.recipeId);
+          return (
+            <div key={slot.key} style={{ marginBottom: 18 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                <span style={{ fontSize: 16 }}>{slot.emoji}</span>
+                <span className="mp-display" style={{ fontWeight: 800, fontSize: 14.5 }}>{slot.label}</span>
+              </div>
+              <div className="mp-card" onClick={() => openMealMenu(selectedDayIdx, slot.key)}
+                style={{ padding: 12, display: "flex", alignItems: "center", gap: 12, cursor: "pointer", opacity: entry.status === "omitido" ? 0.5 : 1 }}>
+                <div style={{ width: 54, height: 54, borderRadius: 14, background: slot.soft, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 24, flexShrink: 0 }}>
+                  {FOOD_EMOJI[slot.key]}
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontWeight: 700, fontSize: 14, textDecoration: entry.status === "omitido" ? "line-through" : "none" }}>{recipe.name}</div>
+                  <div style={{ fontSize: 11.5, color: "var(--ink-soft)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {recipe.ingredients.map((i) => i.name).join(", ") || "Sin ingredientes"}
+                  </div>
+                </div>
+                <div style={{ textAlign: "right", flexShrink: 0 }}>
+                  <Icon name="vdots" size={16} color="var(--ink-soft)" />
+                </div>
+              </div>
+            </div>
+          );
+        });
+      })()}
+
+      <button className="mp-btn" onClick={onAddMeal}
+        style={{ width: "100%", background: "var(--blue)", color: "#fff", padding: "14px", borderRadius: 16, fontSize: 14.5, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, boxShadow: "0 8px 20px rgba(62,123,250,0.3)" }}>
+        <Icon name="plus" size={18} color="#fff" /> Registrar comida
+      </button>
+    </div>
+  );
+}
+
+/* ---------- meal action sheet (the ⋮ menu) ---------- */
+function MealActionSheet({ entry, recipe, onStatus, onChange, onRemove, onClose }) {
+  return (
+    <div className="mp-overlay" onClick={onClose}>
+      <div className="mp-modal" onClick={(e) => e.stopPropagation()}>
+        <div style={{ width: 40, height: 4, background: "var(--line)", borderRadius: 2, margin: "0 auto 16px" }} />
+        {recipe && <div className="mp-display" style={{ fontWeight: 800, fontSize: 15, marginBottom: 14 }}>{recipe.name}</div>}
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          <SheetAction icon="check" color="var(--green)" label="Marcar como comido" onClick={() => onStatus("comido")} />
+          <SheetAction icon="dots" color="var(--yellow)" label="Marcar como omitido" onClick={() => onStatus("omitido")} />
+          <SheetAction icon="calendar" color="var(--blue)" label="Cambiar receta" onClick={onChange} />
+          <SheetAction icon="plus" color="var(--red)" label="Quitar del plan" onClick={onRemove} />
+        </div>
+        <button className="mp-btn" onClick={onClose} style={{ width: "100%", marginTop: 14, background: "var(--bg)", padding: 12, borderRadius: 14, fontSize: 13.5 }}>Cancelar</button>
+      </div>
+    </div>
+  );
+}
+function SheetAction({ icon, color, label, onClick }) {
+  return (
+    <button className="mp-btn" onClick={onClick} style={{ display: "flex", alignItems: "center", gap: 12, background: "var(--bg)", padding: "12px 14px", borderRadius: 14, textAlign: "left" }}>
+      <span style={{ width: 32, height: 32, borderRadius: 10, background: "#fff", display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <Icon name={icon} size={16} color={color} />
+      </span>
+      <span style={{ fontSize: 13.5, fontWeight: 600 }}>{label}</span>
+    </button>
+  );
+}
+
+/* ---------- add meal sheet ---------- */
+function AddMealSheet({ recipes, onClose, onConfirm, onNewRecipe }) {
+  const [slot, setSlot] = useState(SLOTS[0].key);
+  const [q, setQ] = useState("");
+  const filtered = recipes.filter((r) => r.category === slot && r.name.toLowerCase().includes(q.toLowerCase()));
+  return (
+    <div className="mp-overlay-center" onClick={onClose}>
+      <div className="mp-modal mp-modal-center" onClick={(e) => e.stopPropagation()}>
+        <div style={{ width: 40, height: 4, background: "var(--line)", borderRadius: 2, margin: "0 auto 16px" }} />
+        <div className="mp-display" style={{ fontWeight: 800, fontSize: 16, marginBottom: 12 }}>Registrar comida</div>
+        <div style={{ display: "flex", gap: 4, marginBottom: 12, background: "var(--bg)", borderRadius: 14, padding: 4 }}>
+          {SLOTS.map((s) => (
+            <button key={s.key} className="mp-btn" onClick={() => setSlot(s.key)}
+              style={{
+                flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 5,
+                padding: "9px 4px", borderRadius: 11, fontSize: 12.5, fontFamily: "'Manrope', sans-serif", fontWeight: 700,
+                background: slot === s.key ? "var(--card)" : "transparent",
+                color: slot === s.key ? s.color : "var(--ink-soft)",
+                boxShadow: slot === s.key ? "0 2px 8px rgba(31,41,55,0.08)" : "none",
+              }}>
+              {s.emoji} {s.label}
+            </button>
+          ))}
+        </div>
+        <input className="mp-input" placeholder="Buscar receta por palabra…" value={q}
+          onChange={(e) => setQ(e.target.value)} style={{ marginBottom: 12 }} autoFocus />
+        {q.trim() && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 260, overflowY: "auto", marginBottom: 4 }}>
+            {filtered.length === 0 && <div style={{ fontSize: 13, color: "var(--ink-soft)", padding: "10px 0" }}>No hay recetas de {slot.toLowerCase()} que coincidan.</div>}
+            {filtered.map((r) => (
+              <div key={r.id} onClick={() => onConfirm(slot, r.id)} className="mp-card" style={{ padding: "10px 12px", cursor: "pointer", boxShadow: "none", border: "1px solid var(--line)" }}>
+                <div style={{ fontWeight: 600, fontSize: 13.5 }}>{r.name}</div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ---------- plan semanal tab (grid) ---------- */
+function PlanTab({ data, days, weekOffset, setWeekOffset, activeMember, setActiveMemberId, getEntry, setEntryStatus, openPicker }) {
+  return (
+    <div>
+      <div className="mp-display" style={{ fontWeight: 800, fontSize: 18, marginBottom: 4 }}>Plan semanal</div>
+      <div style={{ fontSize: 12, color: "var(--ink-soft)", marginBottom: 14, display: "flex", alignItems: "center", gap: 8 }}>
+        <button className="mp-btn" onClick={() => setWeekOffset((w) => w - 1)} style={{ background: "none", color: "var(--ink-soft)" }}>‹</button>
+        {fmtDate(days[0])} – {fmtDate(days[6])}
+        <button className="mp-btn" onClick={() => setWeekOffset((w) => w + 1)} style={{ background: "none", color: "var(--ink-soft)" }}>›</button>
+      </div>
+      <div style={{ display: "flex", gap: 6, marginBottom: 14, overflowX: "auto" }}>
+        {data.members.map((m) => (
+          <button key={m.id} onClick={() => setActiveMemberId(m.id)} className="mp-btn mp-chip"
+            style={{ border: `1.5px solid ${m.color}`, background: activeMember.id === m.id ? m.color : "#fff", color: activeMember.id === m.id ? "#fff" : m.color, whiteSpace: "nowrap" }}>
+            {m.name}
+          </button>
+        ))}
+      </div>
+      {SLOTS.map((slot) => (
+        <div key={slot.key} style={{ marginBottom: 16 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 7 }}>
+            <span style={{ fontSize: 14 }}>{slot.emoji}</span>
+            <span className="mp-display" style={{ fontWeight: 800, fontSize: 13 }}>{slot.label}</span>
+          </div>
+          <div style={{ display: "flex", gap: 7, overflowX: "auto", paddingBottom: 4 }}>
+            {days.map((d, dayIdx) => {
+              const entry = getEntry(dayIdx, slot.key, activeMember.id);
+              const recipe = entry && data.recipes.find((r) => r.id === entry.recipeId);
+              return (
+                <div key={dayIdx} onClick={() => openPicker(dayIdx, slot.key)}
+                  style={{ minWidth: 108, background: recipe ? "#fff" : "transparent", border: recipe ? "1px solid var(--line)" : "1.3px dashed var(--line)", borderRadius: 12, padding: 8, cursor: "pointer", boxShadow: recipe ? "0 3px 10px rgba(31,41,55,0.05)" : "none" }}>
+                  <div style={{ fontSize: 9.5, fontWeight: 700, color: "var(--ink-soft)", marginBottom: 4 }}>{DAY_NAMES[dayIdx]} {d.getDate()}</div>
+                  {recipe ? (
+                    <React.Fragment>
+                      <div style={{ fontSize: 11.5, fontWeight: 600, lineHeight: 1.25, textDecoration: entry.status === "omitido" ? "line-through" : "none" }}>{recipe.name}</div>
+                    </React.Fragment>
+                  ) : (
+                    <div style={{ fontSize: 11, color: "var(--ink-soft)" }}>+ agregar</div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/* ---------- recipe picker ---------- */
+function RecipePicker({ recipes, currentId, onPick, onClose, onNewRecipe }) {
+  const [q, setQ] = useState("");
+  const filtered = recipes.filter((r) => r.name.toLowerCase().includes(q.toLowerCase()));
+  return (
+    <div className="mp-overlay" onClick={onClose}>
+      <div className="mp-modal" onClick={(e) => e.stopPropagation()}>
+        <div style={{ width: 40, height: 4, background: "var(--line)", borderRadius: 2, margin: "0 auto 16px" }} />
+        <div className="mp-display" style={{ fontWeight: 800, fontSize: 16, marginBottom: 10 }}>Elegir receta</div>
+        <input className="mp-input" placeholder="Buscar receta…" value={q} onChange={(e) => setQ(e.target.value)} style={{ marginBottom: 10 }} autoFocus />
+        {currentId && (<button className="mp-btn" style={{ marginBottom: 10, background: "none", color: "var(--red)", fontSize: 12.5, fontWeight: 700 }} onClick={() => onPick(null)}>✕ Quitar del plan</button>)}
+        <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 300, overflowY: "auto" }}>
+          {filtered.length === 0 && <div style={{ fontSize: 13, color: "var(--ink-soft)" }}>No hay recetas que coincidan.</div>}
+          {filtered.map((r) => (
+            <div key={r.id} onClick={() => onPick(r.id)} className="mp-card" style={{ padding: "10px 12px", cursor: "pointer", boxShadow: "none", border: "1px solid var(--line)" }}>
+              <div style={{ fontWeight: 600, fontSize: 13.5 }}>{r.name}</div>
+              <div style={{ fontSize: 11, color: "var(--ink-soft)" }}>{r.category}</div>
+            </div>
+          ))}
+        </div>
+        <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
+          <button className="mp-btn" onClick={onNewRecipe} style={{ flex: 1, background: "var(--blue)", color: "#fff", padding: 12, borderRadius: 14 }}>+ Nueva receta</button>
+          <button className="mp-btn" onClick={onClose} style={{ background: "var(--bg)", padding: "12px 16px", borderRadius: 14 }}>Cerrar</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ---------- alimentos (recetas) tab ---------- */
+function RecipesTab({ recipes, onNew, onEdit }) {
+  return (
+    <div>
+      <div className="mp-display" style={{ fontWeight: 800, fontSize: 18, marginBottom: 16 }}>Alimentos ({recipes.length})</div>
+      <button className="mp-btn" onClick={onNew}
+        style={{ width: "100%", background: "var(--blue)", color: "#fff", padding: "14px", borderRadius: 16, fontSize: 14.5, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, boxShadow: "0 8px 20px rgba(62,123,250,0.3)", marginBottom: 16 }}>
+        <Icon name="plus" size={18} color="#fff" /> Nueva receta
+      </button>
+      {recipes.length === 0 && (
+        <div style={{ fontSize: 13.5, color: "var(--ink-soft)", padding: "30px 0", textAlign: "center" }}>Aún no hay recetas. Crea la primera.</div>
+      )}
+      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        {recipes.map((r) => (
+          <div key={r.id} className="mp-card" style={{ padding: 12, cursor: "pointer", display: "flex", alignItems: "center", gap: 12 }} onClick={() => onEdit(r)}>
+            <div style={{ width: 46, height: 46, borderRadius: 12, background: "var(--blue-soft)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, flexShrink: 0 }}>
+              {FOOD_EMOJI[r.category] || "🍽️"}
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontWeight: 700, fontSize: 14 }}>{r.name}</div>
+              <div style={{ fontSize: 11, color: "var(--ink-soft)" }}>{r.category} · {r.ingredients.length} ingr.</div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function RecipeModal({ recipe, onSave, onDelete, onClose }) {
+  const [name, setName] = useState(recipe?.name || "");
+  const [category, setCategory] = useState(recipe?.category || "Comida");
+  const [ingredients, setIngredients] = useState(recipe?.ingredients?.length ? recipe.ingredients : [{ name: "", qty: "", unit: "" }]);
+
+  function updateIng(i, patch) { setIngredients((prev) => prev.map((ing, idx) => (idx === i ? { ...ing, ...patch } : ing))); }
+  function addIng() { setIngredients((prev) => [...prev, { name: "", qty: "", unit: "" }]); }
+  function removeIng(i) { setIngredients((prev) => prev.filter((_, idx) => idx !== i)); }
+  function handleSave() {
+    if (!name.trim()) return;
+    onSave({ id: recipe?.id || uid(), name: name.trim(), category, ingredients: ingredients.filter((i) => i.name.trim()) });
+  }
+
+  return (
+    <div className="mp-overlay-center" onClick={onClose}>
+      <div className="mp-modal mp-modal-center" onClick={(e) => e.stopPropagation()}>
+        <div style={{ width: 40, height: 4, background: "var(--line)", borderRadius: 2, margin: "0 auto 16px" }} />
+        <div className="mp-display" style={{ fontWeight: 800, fontSize: 16, marginBottom: 14 }}>{recipe ? "Editar receta" : "Nueva receta"}</div>
+        <label className="mp-label">Nombre</label>
+        <input className="mp-input" value={name} onChange={(e) => setName(e.target.value)} placeholder="Ej. Avena con frutas" style={{ marginBottom: 10 }} />
+        <label className="mp-label">Categoría</label>
+        <select className="mp-input" value={category} onChange={(e) => setCategory(e.target.value)} style={{ marginBottom: 10 }}>
+          {SLOT_KEYS.map((s) => <option key={s} value={s}>{s}</option>)}
+        </select>
+        <label className="mp-label">Ingredientes</label>
+        <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 8 }}>
+          {ingredients.map((ing, i) => (
+            <div key={i} style={{ display: "flex", gap: 5 }}>
+              <input className="mp-input" placeholder="Ingrediente" value={ing.name} onChange={(e) => updateIng(i, { name: e.target.value })} style={{ flex: 3 }} />
+              <input className="mp-input" placeholder="Cant." value={ing.qty} onChange={(e) => updateIng(i, { qty: e.target.value })} style={{ flex: 1 }} />
+              <input className="mp-input" placeholder="Unidad" value={ing.unit} onChange={(e) => updateIng(i, { unit: e.target.value })} style={{ flex: 1 }} />
+              <button className="mp-btn" onClick={() => removeIng(i)} style={{ background: "none", color: "var(--red)" }}>✕</button>
+            </div>
+          ))}
+        </div>
+        <button className="mp-btn" onClick={addIng} style={{ background: "none", color: "var(--blue)", fontSize: 12.5, marginBottom: 16 }}>+ ingrediente</button>
+        <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+          <div>{onDelete && <button className="mp-btn" onClick={onDelete} style={{ background: "#FDE9E6", color: "var(--red)", padding: "11px 16px", borderRadius: 14 }}>Eliminar</button>}</div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button className="mp-btn" onClick={onClose} style={{ background: "var(--bg)", padding: "11px 16px", borderRadius: 14 }}>Cancelar</button>
+            <button className="mp-btn" onClick={handleSave} style={{ background: "var(--blue)", color: "#fff", padding: "11px 18px", borderRadius: 14 }}>Guardar</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function NumField({ label, value, onChange, disabled }) {
+  return (
+    <div>
+      <label className="mp-label" style={{ fontSize: 9.5 }}>{label}</label>
+      <input type="number" className="mp-input" value={value} onChange={(e) => onChange(e.target.value)} disabled={disabled}
+        style={disabled ? { background: "var(--bg)", color: "var(--ink-soft)" } : undefined} />
+    </div>
+  );
+}
+
+/* ---------- compras tab ---------- */
+function ShoppingTab({ data, weekKey, toggleShoppingItem, onBack }) {
+  const items = useMemo(() => {
+    const map = {};
+    for (let dayIdx = 0; dayIdx < 7; dayIdx++) {
+      for (const slot of SLOT_KEYS) {
+        for (const m of data.members) {
+          const key = `${weekKey}|${dayIdx}|${slot}|${m.id}`;
+          const entry = data.entries[key];
+          if (!entry) continue;
+          const recipe = data.recipes.find((r) => r.id === entry.recipeId);
+          if (!recipe) continue;
+          for (const ing of recipe.ingredients) {
+            const ikey = `${ing.name.trim().toLowerCase()}__${ing.unit.trim().toLowerCase()}`;
+            if (!map[ikey]) map[ikey] = { name: ing.name, unit: ing.unit, qty: 0, hasQty: false };
+            const q = parseFloat(ing.qty);
+            if (!isNaN(q)) { map[ikey].qty += q; map[ikey].hasQty = true; }
+          }
+        }
+      }
+    }
+    return Object.entries(map).sort((a, b) => a[1].name.localeCompare(b[1].name));
+  }, [data, weekKey]);
+
+  return (
+    <div>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
+        <button className="mp-icon-btn" onClick={onBack}><Icon name="back" size={18} /></button>
+        <div className="mp-display" style={{ fontWeight: 800, fontSize: 18 }}>Lista de compras</div>
+      </div>
+      <div className="mp-card" style={{ padding: 0, overflow: "hidden" }}>
+        {items.length === 0 ? (
+          <div style={{ padding: 30, textAlign: "center", fontSize: 13.5, color: "var(--ink-soft)" }}>Aún no has planeado comidas con ingredientes esta semana.</div>
+        ) : (
+          <div style={{ padding: "6px 16px 16px" }}>
+            {items.map(([key, item]) => {
+              const checked = !!data.shoppingChecked[weekKey + "|" + key];
+              return (
+                <label key={key} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 0", borderBottom: "1px solid var(--line)", cursor: "pointer" }}>
+                  <input type="checkbox" checked={checked} onChange={() => toggleShoppingItem(key)} style={{ width: 17, height: 17, accentColor: "var(--green)" }} />
+                  <span style={{ flex: 1, fontSize: 14, textDecoration: checked ? "line-through" : "none", color: checked ? "var(--ink-soft)" : "var(--ink)", textTransform: "capitalize" }}>{item.name}</span>
+                  <span style={{ fontSize: 12, color: "var(--ink-soft)" }}>{item.hasQty ? `${Number(item.qty.toFixed(2))} ${item.unit}` : item.unit}</span>
+                </label>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ---------- estadisticas (nutricion) tab ---------- */
+function NutritionTab({ data, days, weekKey }) {
+  const [dayIdx, setDayIdx] = useState(todayIdxInWeek());
+  return (
+    <div>
+      <div className="mp-display" style={{ fontWeight: 800, fontSize: 18, marginBottom: 14 }}>Estadísticas</div>
+      <div style={{ display: "flex", gap: 6, marginBottom: 16, overflowX: "auto" }}>
+        {days.map((d, i) => (
+          <button key={i} className="mp-btn mp-chip" onClick={() => setDayIdx(i)} style={{ background: dayIdx === i ? "var(--ink)" : "var(--bg)", color: dayIdx === i ? "#fff" : "var(--ink)", whiteSpace: "nowrap" }}>
+            {DAY_NAMES[i]} {d.getDate()}
+          </button>
+        ))}
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+        {data.members.map((m) => (<NutritionFactsPanel key={m.id} member={m} data={data} weekKey={weekKey} dayIdx={dayIdx} />))}
+        {data.members.length === 0 && <div style={{ color: "var(--ink-soft)" }}>Agrega personas para ver sus estadísticas.</div>}
+      </div>
+    </div>
+  );
+}
+function NutritionFactsPanel({ member, data, weekKey, dayIdx }) {
+  const summary = useMemo(() => {
+    let planned = 0, done = 0;
+    const items = [];
+    for (const slot of SLOT_KEYS) {
+      const key = `${weekKey}|${dayIdx}|${slot}|${member.id}`;
+      const entry = data.entries[key];
+      if (!entry) continue;
+      planned++;
+      if (entry.status === "comido") done++;
+      const r = data.recipes.find((rr) => rr.id === entry.recipeId);
+      items.push({ slot, name: r ? r.name : null, status: entry.status });
+    }
+    return { planned, done, items };
+  }, [data, weekKey, dayIdx, member.id]);
+  return (
+    <div className="mp-card" style={{ padding: 16 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+        <div className="mp-display" style={{ fontWeight: 800, fontSize: 14.5 }}>{member.name}</div>
+        <span style={{ width: 10, height: 10, borderRadius: "50%", background: member.color }} />
+      </div>
+      <div style={{ fontSize: 12.5, color: "var(--ink-soft)", marginBottom: 10 }}>{summary.done} de {summary.planned} comidas registradas</div>
+      {summary.items.length === 0 && <div style={{ fontSize: 12.5, color: "var(--ink-soft)" }}>Sin comidas planificadas este día.</div>}
+      {summary.items.map((it) => (
+        <div key={it.slot} style={{ display: "flex", justifyContent: "space-between", padding: "5px 0", fontSize: 12.5, borderTop: "1px solid var(--line)" }}>
+          <span>{it.slot}</span>
+          <span style={{ color: "var(--ink-soft)", textDecoration: it.status === "omitido" ? "line-through" : "none" }}>{it.name || "—"}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/* ---------- mas tab ---------- */
+function MasTab({ members, onAdd, onUpdate, onRemove, onBack }) {
+  const [name, setName] = useState("");
+  return (
+    <div>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
+        <button className="mp-icon-btn" onClick={onBack}><Icon name="back" size={18} /></button>
+        <div className="mp-display" style={{ fontWeight: 800, fontSize: 18 }}>Más</div>
+      </div>
+      <div className="mp-display" style={{ fontWeight: 700, fontSize: 13.5, color: "var(--ink-soft)", marginBottom: 10, textTransform: "uppercase", letterSpacing: ".03em" }}>Personas</div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 16 }}>
+        {members.map((m) => (
+          <div key={m.id} className="mp-card" style={{ padding: 12 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <input className="mp-input" value={m.name} onChange={(e) => onUpdate(m.id, { name: e.target.value })} style={{ fontWeight: 700, flex: 1, marginRight: 8 }} />
+              <button className="mp-btn" onClick={() => onRemove(m.id)} style={{ background: "none", color: "var(--red)" }}>✕</button>
+            </div>
+          </div>
+        ))}
+      </div>
+      <div style={{ display: "flex", gap: 8 }}>
+        <input className="mp-input" placeholder="Nombre de la nueva persona" value={name} onChange={(e) => setName(e.target.value)} />
+        <button className="mp-btn" onClick={() => { if (name.trim()) { onAdd(name.trim()); setName(""); } }} style={{ background: "var(--blue)", color: "#fff", padding: "9px 16px", borderRadius: 12, whiteSpace: "nowrap" }}>+ Agregar</button>
+      </div>
+    </div>
+  );
+}
+
+const root = ReactDOM.createRoot(document.getElementById("root"));
+root.render(<App />);
+</script>
+<script>
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", () => {
+      navigator.serviceWorker.register("sw.js").catch((e) => console.error("SW error", e));
+    });
+  }
+</script>
+</body>
+</html>
